@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>第二次段考單字卡</title>
+<meta name="theme-color" content="#5F7487">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="段考單字卡">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}img{max-width:100%}</style>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app"></div>
+<script>
+window.VOCAB_APP = { name: "第二次段考單字卡", mode: "pwa" };
+window.VOCAB_CACHE = "vocab-366a73efe701";
+window.VOCAB_FILES = ["./", "index.html", "app.css", "app.js", "atk-400.woff2", "atk-700.woff2", "icon-180.png", "icon-192.png", "icon-512.png", "manifest.webmanifest", "noto-greek.woff2", "noto-latin.woff2", "noto-latinext.woff2", "words.json"];
+if ('serviceWorker' in navigator) {
+  var hadController = !!navigator.serviceWorker.controller, reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    // 新版本接手：只在「原本已有舊版」時重新整理一次（進度存在 localStorage，不受影響）
+    if (hadController && !reloading) { reloading = true; location.reload(); }
+    hadController = true;
+  });
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {
+      if (navigator.onLine) reg.update().catch(function () {});
+    }).catch(function () {});
+  });
+}
+</script>
+<script src="app.js"></script>
+</body>
+</html>
