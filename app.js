@@ -283,11 +283,44 @@
   function setTabs() { document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === S.view))); }
   function render() {
     setTabs(); closeSheet();
-    if (S.view === 'cards') renderCards();
+    if (S.view === 'home') renderHome();
+    else if (S.view === 'cards') renderCards();
     else if (S.view === 'review') renderReview();
     else if (S.view === 'quiz') renderQuiz();
     else if (S.view === 'search') renderSearch();
     else renderSettings();
+  }
+
+
+  // ---- cover / home ----
+  const SRC_TILES = [['all', '全部單字'], ['課本', '課本'], ['雜誌', '雜誌'], ['核心', '核心單字'], ['成功閱讀', '成功閱讀'], ['學測翻譯', '學測翻譯'], ['multi', '多個來源都有']];
+  let hf = null; // draft filter on the cover
+  function srcCount(src, sub) { return WORDS.filter((w) => matchFilter(w, { src, sub: sub || [], pos: [], theme: [], mark: 'all' })).length; }
+  function renderHome() {
+    if (!hf) hf = { src: S.filter.src, sub: (S.filter.sub || []).slice() };
+    const subs = {};
+    for (const w of WORDS) for (const r of w.refs) (subs[r.src] = subs[r.src] || new Set()).add(subKey(r));
+    const subList = SRC_ORDER.includes(hf.src) ? Array.from(subs[hf.src] || []).sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1))) : [];
+    const subName = { '課本': '選課別', '雜誌': '選單元', '核心': '選 Unit', '成功閱讀': '選 Unit', '學測翻譯': '選 Unit' }[hf.src];
+    const n = srcCount(hf.src, hf.sub);
+    const due = WORDS.filter((w) => S.srs[w.id] && S.srs[w.id].due <= today()).length;
+    const resumeKey = filterKey(S.filter) + '|' + S.order;
+    const resumeAt = S.pos[resumeKey] || 0;
+    main().innerHTML = voiceBanner() + `<section class="cover">
+        <div class="cover-mark" aria-hidden="true"><span>A</span><span>a</span></div>
+        <h2 class="cover-title">第二次段考<br>英文單字卡</h2>
+        <p class="cover-sub">戰勝加考　戰勝段考！</p>
+        <div class="cover-stats"><span><b>${WORDS.length}</b> 張卡</span><span><b>${due}</b> 個字今天要複習</span><span><b>${Object.values(S.marks).filter((m) => m === 'again').length}</b> 個再複習</span></div>
+      </section>
+      <section class="pick">
+        <h3>選擇單字來源</h3>
+        <div class="tiles">${SRC_TILES.map(([v, l]) => `<button type="button" class="tile" data-hsrc="${esc(v)}" aria-pressed="${hf.src === v}"><span class="tl">${esc(l)}</span><span class="tn">${srcCount(v)} 字</span></button>`).join('')}</div>
+        ${subList.length ? `<div class="subpick"><span class="lbl">${subName}（不選＝全部）</span><div class="seg">${subList.map((x) => `<button type="button" data-hsub="${esc(x)}" aria-pressed="${hf.sub.includes(x)}">${esc(x)}</button>`).join('')}</div></div>` : ''}
+        ${resumeAt > 0 ? `<button type="button" class="linkbtn" data-act="resume">繼續上次：${esc(filterLabel(S.filter))}，第 ${resumeAt + 1} 個</button>` : ''}
+      </section>
+      <p class="updated">最新更新：${esc(DATA.updated || DATA.version)}</p>`;
+    bar().innerHTML = `<div class="row2"><button class="btn big" type="button" data-act="homereview">今日複習${due ? `（${due}）` : ''}</button><button class="btn primary big" type="button" data-act="homestart" ${n ? '' : 'disabled'}>開始背 ${n} 個字</button></div>`;
+    main().scrollTop = 0;
   }
 
   // ---- cards ----
@@ -573,7 +606,7 @@
         <textarea class="ta" id="copyText" hidden readonly></textarea>
         ${confirmClear ? `<div class="banner"><b>確定要清除所有進度嗎？</b>標記、複習排程、位置和設定都會刪除，無法復原。建議先按「複製進度」備份。<div class="row2" style="margin-top:10px"><button class="btn" type="button" data-act="clearno">取消</button><button class="btn primary" type="button" data-act="clearyes">確定清除</button></div></div>` : `<button class="btn" type="button" data-act="clearprog">清除進度</button>`}
       </div></section>
-      <section class="sec"><h3>關於</h3><dl class="kv"><dt>單字數</dt><dd>${WORDS.length} 張卡</dd><dt>資料版本</dt><dd>${esc(DATA.version)}</dd><dt>標記</dt><dd>再複習 ${Object.values(S.marks).filter((m) => m === 'again').length}・已熟悉 ${Object.values(S.marks).filter((m) => m === 'known').length}</dd><dt>說明</dt><dd>標「AI 補寫」的內容不是教材原文。音標以 CMU 發音辭典核對；標「待確認」的請以詞典為準。發現錯字請告訴老師。</dd></dl></section>
+      <section class="sec"><h3>關於</h3><dl class="kv"><dt>單字數</dt><dd>${WORDS.length} 張卡</dd><dt>最新更新</dt><dd>${esc(DATA.updated || DATA.version)}</dd><dt>資料版本</dt><dd>${esc(DATA.version)}</dd><dt>標記</dt><dd>再複習 ${Object.values(S.marks).filter((m) => m === 'again').length}・已熟悉 ${Object.values(S.marks).filter((m) => m === 'known').length}</dd><dt>說明</dt><dd>標「AI 補寫」的內容不是教材原文。音標以 CMU 發音辭典核對；標「待確認」的請以詞典為準。發現錯字請告訴老師。</dd></dl></section>
     </div>`;
     bar().innerHTML = '';
     const vsel = $('#voiceSel'); if (vsel) vsel.addEventListener('change', () => { S.settings.voiceURI = vsel.value; save(); TTS.speak('Hello! This is my voice.'); });
@@ -612,6 +645,9 @@
     const tab = t.closest('.tabs button'); if (tab) { TTS.stop(); S.view = tab.dataset.view; if (S.view !== 'quiz') { /* keep quiz */ } save(); render(); return; }
     const vb = t.closest('[data-view]'); if (vb && !vb.closest('.tabs')) { S.view = vb.dataset.view; save(); render(); return; }
     if ($('#sheet') && t.closest('#sheet')) return; // handled by sheet
+    const hs = t.closest('[data-hsrc]'); if (hs) { hf = { src: hs.dataset.hsrc, sub: [] }; renderHome(); return; }
+    const hsub = t.closest('[data-hsub]'); if (hsub) { const k = hf.sub.indexOf(hsub.dataset.hsub); if (k >= 0) hf.sub.splice(k, 1); else hf.sub.push(hsub.dataset.hsub); renderHome(); return; }
+    const hb = t.closest('[data-act="gohome"]'); if (hb) { TTS.stop(); hf = null; S.view = 'home'; render(); return; }
     const setb = t.closest('[data-set]');
     if (setb) {
       const k = setb.dataset.set; let v = setb.dataset.v;
@@ -626,6 +662,9 @@
     const a = b.dataset.act;
     const w = S.view === 'cards' ? curWord() : null;
     switch (a) {
+      case 'homestart': S.filter = Object.assign(defaultFilter(), { src: hf.src, sub: hf.sub.slice() }); S.view = 'cards'; hf = null; save(); render(); break;
+      case 'resume': S.view = 'cards'; hf = null; save(); render(); break;
+      case 'homereview': S.view = 'review'; hf = null; save(); render(); break;
       case 'next': go(1); break;
       case 'prev': go(-1); break;
       case 'say': if (w) TTS.speak(w.say); break;
@@ -674,7 +713,7 @@
   // ---------------- boot ----------------
   async function boot() {
     const root = document.getElementById('app');
-    root.innerHTML = `<header class="top"><div class="brand"><h1>${esc(APP.name)}</h1><span class="sync" id="syncLabel"></span></div><nav class="tabs" role="tablist">${[['cards', '單字卡'], ['review', '今日複習'], ['quiz', '測驗'], ['search', '搜尋'], ['settings', '設定']].map(([v, l]) => `<button type="button" role="tab" data-view="${v}">${l}</button>`).join('')}</nav></header><main class="main" id="main"><div class="empty">載入單字中…</div></main><footer class="bar" id="bar"></footer>`;
+    root.innerHTML = `<header class="top"><div class="brand"><button type="button" class="homebtn" data-act="gohome" aria-label="回到封面"><h1>${esc(APP.name)}</h1><span class="homehint">封面</span></button><span class="sync" id="syncLabel"></span></div><nav class="tabs" role="tablist">${[['cards', '單字卡'], ['review', '今日複習'], ['quiz', '測驗'], ['search', '搜尋'], ['settings', '設定']].map(([v, l]) => `<button type="button" role="tab" data-view="${v}">${l}</button>`).join('')}</nav></header><main class="main" id="main"><div class="empty">載入單字中…</div></main><footer class="bar" id="bar"></footer>`;
     try {
       DATA = window.VOCAB_DATA || await fetch('words.json', { cache: 'no-cache' }).then((r) => r.json());
     } catch (e) {
@@ -682,6 +721,7 @@
     }
     WORDS = DATA.words; BYID = {}; for (const w of WORDS) BYID[w.id] = w;
     const loc = loadLocal(); if (loc) S = loc;
+    S.view = 'home';
     applyTheme(); TTS.init();
     document.addEventListener('click', onClick);
     document.addEventListener('keydown', onKey);
