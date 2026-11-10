@@ -411,13 +411,32 @@
 
   // ---- quiz ----
   let Q = null;
-  const QTYPES = [['en2zh', '看英文選中文'], ['au2zh', '聽發音選中文'], ['zh2en', '看中文選英文'], ['spell', '拼字題'], ['cloze', '例句填空'], ['mix', '綜合']];
+  const QTYPES = [['en2zh', '看英文選中文'], ['au2zh', '聽發音選中文'], ['zh2en', '看中文選英文'], ['spell', '拼字題（字頭字尾／例句挖空）'], ['cloze', '例句填空'], ['mix', '綜合']];
   let qset = { type: 'en2zh', n: 10, scope: 'filter' };
   function zhOf(w) { return w.m.map((m) => m.p + ' ' + m.z).slice(0, 2).join('；'); }
   function clozeOf(w) {
     if (!w.hl) return null;
     for (const x of w.ex) { let rx; try { rx = new RegExp(w.hl, 'i'); } catch (e) { return null; } const m = rx.exec(x.en); if (m) return { text: x.en.slice(0, m.index) + '_____' + x.en.slice(m.index + m[0].length), ans: m[0], zh: x.zh }; }
     return null;
+  }
+  // 拼字題提示：每個字只給字頭和字尾，中間挖空（3 個字母以內的小字整個給）
+  function letterPattern(ans, isPhrase) {
+    return ans.split(' ').map((t) => {
+      const L = t.replace(/[^A-Za-z]/g, '').length;
+      if (isPhrase && L <= 3) return esc(t);
+      const idx = []; for (let i = 0; i < t.length; i++) if (/[A-Za-z]/.test(t[i])) idx.push(i);
+      const first = idx[0], last = idx[idx.length - 1];
+      return [...t].map((ch, i) => {
+        if (!/[A-Za-z]/.test(ch)) return esc(ch);
+        if (i === first || (i === last && L > 3)) return esc(ch);
+        return '_';
+      }).join(' ');
+    }).join('&nbsp;&nbsp;&nbsp;');
+  }
+  function spellSentence(w) {
+    const c = clozeOf(w); if (!c) return null;
+    if (/\s/.test(c.ans) !== /\s/.test(w.w.trim())) return null;
+    return c;
   }
   function spellable(w) { return !/[\/…]|\.\.\.|\bsb\b|\bsth\b|one's/.test(w.w); }
   function makeQuiz(ids) {
@@ -435,8 +454,9 @@
       if (t === 'cloze' && !clozeOf(w)) t = qset.type === 'cloze' ? null : 'en2zh';
       if (t === 'spell' && !spellable(w)) t = qset.type === 'spell' ? null : 'zh2en';
       if (!t) continue;
-      const q = { id: w.id, t, sub: t === 'spell' ? (qs.length % 2 ? 'zh' : 'au') : '' };
+      const q = { id: w.id, t, sub: t === 'spell' ? ((qs.length % 2 === 0 && spellSentence(w)) ? 'sent' : 'zh') : '' };
       if (t === 'en2zh' || t === 'au2zh' || t === 'zh2en' || t === 'cloze') q.opts = distractors(w, t);
+      if (t === 'spell') q.ans = q.sub === 'sent' ? spellSentence(w).ans : w.w;
       qs.push(q);
     }
     Q = { qs, i: 0, score: 0, wrong: [], answered: false, picked: null };
@@ -470,7 +490,17 @@
     if (q.t === 'au2zh') { prompt = '聽發音，選出正確的中文'; body = `<button class="btn primary big" type="button" data-act="qsay" style="width:100%">▶ 再聽一次</button>`; }
     if (q.t === 'zh2en') { prompt = '選出符合中文的英文'; body = `<div class="qbody">${esc(zhOf(w))}</div>`; }
     if (q.t === 'cloze') { const c = clozeOf(w); prompt = '選出填入空格的字（不需變化形）'; body = `<div class="qbody" lang="en" style="font-family:var(--font-word)">${esc(c.text)}</div><div class="hint" style="margin-top:6px">${esc(c.zh)}</div>`; }
-    if (q.t === 'spell') { prompt = q.sub === 'au' ? '聽發音，拼出這個字' : '看中文，拼出這個字'; body = q.sub === 'au' ? `<button class="btn primary big" type="button" data-act="qsay" style="width:100%">▶ 再聽一次</button><div class="hint" style="margin-top:6px">提示：${w.w.length} 個字元，第一個字母 ${esc(w.w[0])}</div>` : `<div class="qbody">${esc(zhOf(w))}</div><div class="hint" style="margin-top:6px">提示：第一個字母 ${esc(w.w[0])}，共 ${w.w.length} 個字元</div>`; }
+    let spellAns = w.w;
+    if (q.t === 'spell') {
+      if (q.sub === 'sent') {
+        const c = spellSentence(w); spellAns = q.ans || c.ans;
+        prompt = '在空格中拼出正確的字（注意字形變化）';
+        body = `<div class="qbody" lang="en" style="font-family:var(--font-word)">${esc(c.text)}</div><div class="hint" style="margin-top:6px">${esc(c.zh)}</div><div class="spellhint" lang="en">${letterPattern(c.ans, /\s/.test(c.ans))}</div>`;
+      } else {
+        prompt = '看中文，拼出這個字';
+        body = `<div class="qbody">${esc(zhOf(w))}</div><div class="spellhint" lang="en">${letterPattern(w.w, /\s/.test(w.w.trim()))}</div>`;
+      }
+    }
     let ans = '';
     if (q.opts) {
       ans = `<div class="opts">${q.opts.map((id) => { const o = BYID[id]; const label = (q.t === 'zh2en' || q.t === 'cloze') ? o.w : zhOf(o); let cls = 'opt' + ((q.t === 'zh2en' || q.t === 'cloze') ? ' en' : ''); if (Q.answered) { if (id === q.id) cls += ' right'; else if (id === Q.picked) cls += ' wrong'; } return `<button class="${cls}" type="button" data-act="qpick" data-id="${id}" ${Q.answered ? 'disabled' : ''}>${esc(label)}</button>`; }).join('')}</div>`;
@@ -478,11 +508,11 @@
       ans = `<form class="spell" id="spellForm" autocomplete="off"><input id="spellInput" lang="en" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="輸入拼字" ${Q.answered ? 'disabled' : ''}><button class="btn primary" type="submit" ${Q.answered ? 'disabled' : ''}>送出</button></form>`;
     }
     let fb = '';
-    if (Q.answered) fb = `<div class="feedback">${Q.lastOk ? '<span class="r">答對了！</span>' : '<span class="w">答錯了。</span>'} 正確答案：<b lang="en">${esc(w.w)}</b>　${esc(zhOf(w))}</div>`;
+    if (Q.answered) fb = `<div class="feedback">${Q.lastOk ? '<span class="r">答對了！</span>' : '<span class="w">答錯了。</span>'} 正確答案：<b lang="en">${esc(q.t === 'spell' ? spellAns : w.w)}</b>${q.t === 'spell' && spellAns.toLowerCase() !== w.w.toLowerCase() ? `（原形 ${esc(w.w)}）` : ''}　${esc(zhOf(w))}</div>`;
     main().innerHTML = `<div class="toolbar"><span class="count">第 ${Q.i + 1}／${Q.qs.length} 題・得分 ${Q.score}</span><span class="grow"></span><button class="chipbtn" type="button" data-act="qquit">結束</button></div><div class="card"><div class="qprompt">${prompt}</div>${body}${ans}${fb}</div>`;
     bar().innerHTML = Q.answered ? `<div class="row2"><button class="btn big" type="button" data-act="qsayw">▶ 發音</button><button class="btn primary big" type="button" data-act="qnext">下一題</button></div>` : '';
-    if (!Q.answered && (q.t === 'au2zh' || (q.t === 'spell' && q.sub === 'au'))) TTS.speak(w.say, false, true);
-    const f = $('#spellForm'); if (f) { f.addEventListener('submit', (e) => { e.preventDefault(); const v = $('#spellInput').value; qAnswer(norm(v) === norm(w.w)); }); if (!Q.answered) setTimeout(() => { const i = $('#spellInput'); if (i) i.focus(); }, 50); }
+    if (!Q.answered && q.t === 'au2zh') TTS.speak(w.say, false, true);
+    const f = $('#spellForm'); if (f) { f.addEventListener('submit', (e) => { e.preventDefault(); const v = $('#spellInput').value; qAnswer(norm(v) === norm(spellAns)); }); if (!Q.answered) setTimeout(() => { const i = $('#spellInput'); if (i) i.focus(); }, 50); }
   }
   function norm(s) { return String(s).toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').trim(); }
   function qAnswer(ok, picked) {

@@ -196,3 +196,6 @@ textarea.ta { width: 100%; min-height: 90px; border: 1px solid var(--pale); back
   .card { animation: rise .18s ease-out; }
   @keyframes rise { from { transform: translateY(4px); opacity: .6; } to { transform: none; opacity: 1; } }
 }
+.spellhint { margin-top: 12px; font-family: var(--font-word); font-size: 22px; letter-spacing: .08em; color: var(--deep); overflow-wrap: anywhere; }
+:root[data-theme="dark"] .spellhint { color: var(--mist); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .spellhint { color: var(--mist); } }
