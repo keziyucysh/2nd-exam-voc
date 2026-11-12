@@ -318,7 +318,7 @@
         ${subList.length ? `<div class="subpick"><span class="lbl">${subName}（不選＝全部）</span><div class="seg">${subList.map((x) => `<button type="button" data-hsub="${esc(x)}" aria-pressed="${hf.sub.includes(x)}">${esc(x)}</button>`).join('')}</div></div>` : ''}
         ${resumeAt > 0 ? `<button type="button" class="linkbtn" data-act="resume">繼續上次：${esc(filterLabel(S.filter))}，第 ${resumeAt + 1} 個</button>` : ''}
       </section>
-      <p class="updated">最新更新：${esc(DATA.updated || DATA.version)}</p>`;
+      <p class="updated">最新更新：${esc(DATA.updated || DATA.version)}</p>${DATA.changes ? `<p class="changes">本次更新：${esc(DATA.changes)}</p>` : ''}`;
     bar().innerHTML = `<div class="row2"><button class="btn big" type="button" data-act="homereview">今日複習${due ? `（${due}）` : ''}</button><button class="btn primary big" type="button" data-act="homestart" ${n ? '' : 'disabled'}>開始背 ${n} 個字</button></div>`;
     main().scrollTop = 0;
   }
@@ -444,8 +444,10 @@
 
   // ---- quiz ----
   let Q = null;
-  const QTYPES = [['en2zh', '看英文選中文'], ['au2zh', '聽發音選中文'], ['zh2en', '看中文選英文'], ['spell', '拼字題（字頭字尾／例句挖空）'], ['cloze', '例句填空'], ['mix', '綜合']];
-  let qset = { type: 'en2zh', n: 10, scope: 'filter' };
+  const QTYPES = [['en2zh', '看英文選中文'], ['au2zh', '聽發音選中文'], ['zh2en', '看中文選英文'], ['spell', '拼字題（字頭字尾／例句挖空）'], ['cloze', '例句填空']];
+  const ALLQ = QTYPES.map((x) => x[0]);
+  let qset = { n: 10, scope: 'filter' };
+  function qtypes() { const t = (S.settings.qtypes || ALLQ).filter((x) => ALLQ.includes(x)); return t; }
   function zhOf(w) { return w.m.map((m) => m.p + ' ' + m.z).slice(0, 2).join('；'); }
   function clozeOf(w) {
     if (!w.hl) return null;
@@ -480,13 +482,16 @@
       const r = rng(Date.now() & 0xffffffff); pool = pool.slice(); for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
     }
     const qs = [];
-    const types = ['en2zh', 'au2zh', 'zh2en', 'spell', 'cloze'];
+    const types = ALLQ.filter((x) => qtypes().includes(x));
+    const fits = (t, w) => (t !== 'cloze' || clozeOf(w)) && (t !== 'spell' || spellable(w));
+    let turn = 0;
     for (const w of pool) {
       if (!ids && qs.length >= qset.n) break;
-      let t = qset.type === 'mix' ? types[qs.length % types.length] : qset.type;
-      if (t === 'cloze' && !clozeOf(w)) t = qset.type === 'cloze' ? null : 'en2zh';
-      if (t === 'spell' && !spellable(w)) t = qset.type === 'spell' ? null : 'zh2en';
+      // 依勾選的題型輪流出題；這個字不適合輪到的題型時，改用下一個勾選的題型
+      let t = null;
+      for (let k = 0; k < types.length; k++) { const c = types[(turn + k) % types.length]; if (fits(c, w)) { t = c; break; } }
       if (!t) continue;
+      turn++;
       const q = { id: w.id, t, sub: t === 'spell' ? ((qs.length % 2 === 0 && spellSentence(w)) ? 'sent' : 'zh') : '' };
       if (t === 'en2zh' || t === 'au2zh' || t === 'zh2en' || t === 'cloze') q.opts = distractors(w, t);
       if (t === 'spell') q.ans = q.sub === 'sent' ? spellSentence(w).ans : w.w;
@@ -505,11 +510,11 @@
   function renderQuiz() {
     if (!Q) {
       main().innerHTML = voiceBanner() + `<div class="card"><div class="form">
-        <div class="field"><span class="lbl">題型</span><div class="seg">${QTYPES.map(([k, l]) => `<button type="button" data-q="type" data-v="${k}" aria-pressed="${qset.type === k}">${l}</button>`).join('')}</div></div>
+        <div class="field"><span class="lbl">題型（可複選，選多種會輪流出題）</span><div class="seg">${QTYPES.map(([k, l]) => `<button type="button" data-q="qt" data-v="${k}" aria-pressed="${qtypes().includes(k)}">${qtypes().includes(k) ? '✓ ' : ''}${l}</button>`).join('')}</div><div class="row2" style="margin-top:8px"><button class="btn small" type="button" data-q="qtall">全選</button><button class="btn small" type="button" data-q="qtnone">全部取消</button></div>${qtypes().length ? '' : '<div class="hint" style="margin-top:6px">請至少選一種題型。</div>'}</div>
         <div class="field"><span class="lbl">題數</span><div class="seg">${[10, 20, 30].map((n) => `<button type="button" data-q="n" data-v="${n}" aria-pressed="${qset.n === n}">${n} 題</button>`).join('')}</div></div>
         <div class="field"><span class="lbl">範圍</span><div class="seg"><button type="button" data-q="scope" data-v="filter" aria-pressed="${qset.scope === 'filter'}">目前篩選（${listFor(S.filter, 'orig').length}）</button><button type="button" data-q="scope" data-v="again" aria-pressed="${qset.scope === 'again'}">只考再複習（${WORDS.filter((w) => S.marks[w.id] === 'again').length}）</button></div><div class="hint" style="margin-top:6px">目前篩選：${esc(filterLabel(S.filter))}</div></div>
         <p class="hint">答錯的字會自動加入「再複習」。</p></div></div>`;
-      bar().innerHTML = `<button class="btn primary big" type="button" data-act="qstart">開始測驗</button>`;
+      bar().innerHTML = `<button class="btn primary big" type="button" data-act="qstart" ${qtypes().length ? '' : 'disabled'}>開始測驗（${qtypes().length} 種題型）</button>`;
       return;
     }
     if (Q.i >= Q.qs.length) {
@@ -656,7 +661,14 @@
       if (k === 'newPerDay' && S.today && S.today.d === today()) { /* new limit applies when review opens */ }
       save(); if (k === 'theme') applyTheme(); renderSettings(); return;
     }
-    const qb = t.closest('[data-q]'); if (qb) { const k = qb.dataset.q; qset[k] = k === 'n' ? +qb.dataset.v : qb.dataset.v; renderQuiz(); return; }
+    const qb = t.closest('[data-q]'); if (qb) {
+      const k = qb.dataset.q;
+      if (k === 'qt') { const cur = qtypes().slice(); const i = cur.indexOf(qb.dataset.v); if (i >= 0) cur.splice(i, 1); else cur.push(qb.dataset.v); S.settings.qtypes = cur; save(); }
+      else if (k === 'qtall') { S.settings.qtypes = ALLQ.slice(); save(); }
+      else if (k === 'qtnone') { S.settings.qtypes = []; save(); }
+      else qset[k] = k === 'n' ? +qb.dataset.v : qb.dataset.v;
+      renderQuiz(); return;
+    }
     const reveal = t.closest('[data-act="reveal"]'); if (reveal && S.settings.hideZh) { const c = reveal.closest('.card'); if (c) c.classList.remove('hidden-zh'); return; }
     const b = t.closest('[data-act]'); if (!b) return;
     const a = b.dataset.act;

@@ -224,3 +224,5 @@ textarea.ta { width: 100%; min-height: 90px; border: 1px solid var(--pale); back
 .tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .subpick .lbl { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
 .updated { text-align: center; font-size: 13px; color: var(--muted); margin: 22px 0 6px; font-variant-numeric: tabular-nums; }
+.changes { text-align: center; font-size: 13px; color: var(--muted); margin: 0 0 8px; line-height: 1.6; text-wrap: balance; }
+.updated { margin-bottom: 4px; }

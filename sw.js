@@ -1,5 +1,5 @@
 /* Service worker — 版本號由所有檔案內容的雜湊產生；任何檔案改變，這行就會不同，瀏覽器便會安裝新版。 */
-const CACHE = 'vocab-ab724e60d92f';
+const CACHE = 'vocab-81251d76b56e';
 const FILES = ["./", "index.html", "app.css", "app.js", "atk-400.woff2", "atk-700.woff2", "icon-180.png", "icon-192.png", "icon-512.png", "manifest.webmanifest", "noto-greek.woff2", "noto-latin.woff2", "noto-latinext.woff2", "words.json"];
 
 self.addEventListener('install', (event) => {
