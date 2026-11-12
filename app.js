@@ -282,7 +282,7 @@
   const main = () => $('#main'); const bar = () => $('#bar');
   function setTabs() { document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === S.view))); }
   function render() {
-    setTabs(); closeSheet();
+    setTabs(); closeSheet(); stopCountdown();
     if (S.view === 'home') renderHome();
     else if (S.view === 'cards') renderCards();
     else if (S.view === 'review') renderReview();
@@ -295,6 +295,32 @@
   // ---- cover / home ----
   const SRC_TILES = [['all', '全部單字'], ['課本', '課本'], ['雜誌', '雜誌'], ['核心', '核心單字'], ['成功閱讀', '成功閱讀'], ['學測翻譯', '學測翻譯'], ['multi', '多個來源都有']];
   let hf = null; // draft filter on the cover
+  // 考試時間一律用臺灣時間（UTC+8），手機時區設錯也不受影響
+  const EXAMS = [
+    { name: '加考倒數', at: '2026-11-17T15:20:00+08:00', when: '11/17（二）15:20' },
+    { name: '段考倒數', at: '2026-11-26T11:00:00+08:00', when: '11/26（四）11:00' },
+  ];
+  let cdTimer = null;
+  function cdParts(ms) {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return [Math.floor(s / 86400), Math.floor(s / 3600) % 24, Math.floor(s / 60) % 60, s % 60];
+  }
+  function countdownHTML() {
+    return `<section class="cd" aria-label="考試倒數">${EXAMS.map((e, i) => `<div class="cd-row" data-cd="${i}"><div class="cd-h"><b>${esc(e.name)}</b><span>${esc(e.when)}</span></div><div class="cd-cells" aria-live="off">${['天', '時', '分', '秒'].map((u) => `<span class="cd-c"><b>--</b><i>${u}</i></span>`).join('')}</div><div class="cd-done" hidden>恭喜已考完！</div></div>`).join('')}</section>`;
+  }
+  function tickCountdown() {
+    const now = Date.now();
+    EXAMS.forEach((e, i) => {
+      const row = document.querySelector(`[data-cd="${i}"]`); if (!row) return;
+      const left = new Date(e.at).getTime() - now;
+      const cells = row.querySelector('.cd-cells'), done = row.querySelector('.cd-done');
+      if (left <= 0) { cells.hidden = true; done.hidden = false; row.classList.add('over'); return; }
+      const p = cdParts(left);
+      row.querySelectorAll('.cd-c b').forEach((b, k) => { const t = k === 0 ? String(p[0]) : String(p[k]).padStart(2, '0'); if (b.textContent !== t) b.textContent = t; });
+    });
+  }
+  function startCountdown() { stopCountdown(); tickCountdown(); cdTimer = setInterval(tickCountdown, 1000); }
+  function stopCountdown() { if (cdTimer) { clearInterval(cdTimer); cdTimer = null; } }
   function srcCount(src, sub) { return WORDS.filter((w) => matchFilter(w, { src, sub: sub || [], pos: [], theme: [], mark: 'all' })).length; }
   function renderHome() {
     if (!hf) hf = { src: S.filter.src, sub: (S.filter.sub || []).slice() };
@@ -310,6 +336,7 @@
         <div class="cover-mark" aria-hidden="true"><span>A</span><span>a</span></div>
         <h2 class="cover-title">第二次段考<br>英文單字卡</h2>
         <p class="cover-sub">戰勝加考　戰勝段考！</p>
+        ${countdownHTML()}
         <div class="cover-stats"><span><b>${WORDS.length}</b> 張卡</span><span><b>${due}</b> 個字今天要複習</span><span><b>${Object.values(S.marks).filter((m) => m === 'again').length}</b> 個再複習</span></div>
       </section>
       <section class="pick">
@@ -321,6 +348,7 @@
       <p class="updated">最新更新：${esc(DATA.updated || DATA.version)}</p>${DATA.changes ? `<p class="changes">本次更新：${esc(DATA.changes)}</p>` : ''}`;
     bar().innerHTML = `<div class="row2"><button class="btn big" type="button" data-act="homereview">今日複習${due ? `（${due}）` : ''}</button><button class="btn primary big" type="button" data-act="homestart" ${n ? '' : 'disabled'}>開始背 ${n} 個字</button></div>`;
     main().scrollTop = 0;
+    startCountdown();
   }
 
   // ---- cards ----
@@ -740,7 +768,7 @@
     window.addEventListener('pagehide', () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch (e) { } Cloud.flush(); });
     render();
     Cloud.init();
-    window.__vocab = { get state() { return S; }, get quiz() { return Q; }, words: () => WORDS, today, addDays, TTS, render, exportProgress };
+    window.__vocab = { EXAMS, cdParts, get state() { return S; }, get quiz() { return Q; }, words: () => WORDS, today, addDays, TTS, render, exportProgress };
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();
