@@ -253,3 +253,12 @@ textarea.ta { width: 100%; min-height: 90px; border: 1px solid var(--pale); back
 .cover .cd-c i { color: #5E6B78; }
 .cover .cd-done { color: #FFF3E8; }
 .cover .cd .cd-row .cd-h b { color: #fff !important; }
+/* exam one-tap review */
+.exams { display: grid; gap: 10px; }
+.exam { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: grid; gap: 8px; border-left: 5px solid var(--rose); }
+.exam-dk { border-left-color: var(--deep); }
+.exam-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.exam-h b { font-size: 17px; white-space: nowrap; }
+.exam-h span { font-size: 13px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.exam-d { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.exam .btn { min-height: 44px; }

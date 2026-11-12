@@ -26,7 +26,17 @@
   function freshState() {
     return { v: 1, updatedAt: 0, marks: {}, srs: {}, pos: {}, settings: Object.assign({}, DEFAULT_SETTINGS), seed: Math.floor(Math.random() * 1e9), order: 'orig', filter: defaultFilter(), view: 'cards', today: null };
   }
-  function defaultFilter() { return { src: 'all', sub: [], pos: [], theme: [], mark: 'all' }; }
+  function defaultFilter() { return { src: 'all', sub: [], pos: [], theme: [], mark: 'all', exam: '' }; }
+  // 考試範圍（老師提供）：一鍵篩出段考／加考要背的字
+  const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  const EXAM_SCOPES = {
+    dk: { name: '段考', when: '11/26（四）11:00', desc: '課本 L4–6・雜誌 U1–U9・核心 U5–7', rules: [['課本', range(4, 6)], ['雜誌', range(1, 9)], ['核心', range(5, 7)]] },
+    jk: { name: '加考', when: '11/17（二）15:20', desc: '核心 U1–10・成功閱讀 1–10 回・學測翻譯 1–3 回・雜誌 10 月號全', rules: [['核心', range(1, 10)], ['成功閱讀', range(1, 10)], ['學測翻譯', range(1, 3)], ['雜誌', range(1, 12)]] },
+  };
+  function inExam(w, key) {
+    const sc = EXAM_SCOPES[key]; if (!sc) return true;
+    return w.refs.some((r) => sc.rules.some(([src, units]) => r.src === src && units.includes(src === '課本' ? r.lesson : r.unit)));
+  }
   let S = freshState();
   function normalizeState(o) {
     const s = freshState();
@@ -156,6 +166,7 @@
     return 'U' + r.unit;
   }
   function matchFilter(w, f) {
+    if (f.exam && !inExam(w, f.exam)) return false;
     if (f.src === 'multi') { if (new Set(w.refs.map((r) => r.src)).size < 2) return false; }
     else if (f.src !== 'all') {
       const rs = srcOf(w, f.src); if (!rs.length) return false;
@@ -172,7 +183,7 @@
   function seqIn(w, src) { const r = srcOf(w, src)[0]; return r ? r.seq : 1e9; }
   function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
   function rng(seed) { let a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-  function filterKey(f) { return JSON.stringify([f.src, (f.sub || []).slice().sort(), (f.pos || []).slice().sort(), (f.theme || []).slice().sort(), f.mark]); }
+  function filterKey(f) { const k = [f.src, (f.sub || []).slice().sort(), (f.pos || []).slice().sort(), (f.theme || []).slice().sort(), f.mark]; if (f.exam) k.push(f.exam); return JSON.stringify(k); }
   function listFor(f, order) {
     let L = WORDS.filter((w) => matchFilter(w, f));
     if (SRC_ORDER.includes(f.src)) L.sort((a, b) => seqIn(a, f.src) - seqIn(b, f.src));
@@ -186,7 +197,8 @@
   function filterLabel(f) {
     const parts = [];
     const srcName = { all: '全部', multi: '多來源', '課本': '課本', '雜誌': '雜誌', '核心': '核心單字', '成功閱讀': '成功閱讀', '學測翻譯': '學測翻譯' }[f.src] || '全部';
-    parts.push(srcName + (f.sub && f.sub.length ? ' ' + f.sub.join('、') : ''));
+    if (f.exam && EXAM_SCOPES[f.exam]) parts.push(EXAM_SCOPES[f.exam].name + '範圍' + (f.src !== 'all' ? '・' + srcName : ''));
+    else parts.push(srcName + (f.sub && f.sub.length ? ' ' + f.sub.join('、') : ''));
     if (f.pos && f.pos.length) parts.push(f.pos.map((p) => POS_NAMES[p]).join('、'));
     if (f.theme && f.theme.length) parts.push(f.theme.join('、'));
     if (f.mark !== 'all') parts.push({ again: '再複習', known: '已熟悉', none: '未標記' }[f.mark]);
@@ -340,7 +352,11 @@
         <div class="cover-stats"><span><b>${WORDS.length}</b> 張卡</span><span><b>${due}</b> 個字今天要複習</span><span><b>${Object.values(S.marks).filter((m) => m === 'again').length}</b> 個再複習</span></div>
       </section>
       <section class="pick">
-        <h3>選擇單字來源</h3>
+        <h3>一鍵複習考試範圍</h3>
+        <div class="exams">${['jk', 'dk'].map((k) => { const sc = EXAM_SCOPES[k]; const n = WORDS.filter((w) => inExam(w, k)).length; const ag = WORDS.filter((w) => inExam(w, k) && S.marks[w.id] === 'again').length; return `<div class="exam exam-${k}"><div class="exam-h"><b>複習${sc.name}</b><span>${n} 字${ag ? `・再複習 ${ag}` : ''}</span></div><p class="exam-d">${esc(sc.desc)}</p><div class="row2"><button type="button" class="btn" data-act="examcards" data-exam="${k}">背單字</button><button type="button" class="btn" data-act="examquiz" data-exam="${k}">小測驗</button></div></div>`; }).join('')}</div>
+      </section>
+      <section class="pick">
+        <h3>或自己選擇單字來源</h3>
         <div class="tiles">${SRC_TILES.map(([v, l]) => `<button type="button" class="tile" data-hsrc="${esc(v)}" aria-pressed="${hf.src === v}"><span class="tl">${esc(l)}</span><span class="tn">${srcCount(v)} 字</span></button>`).join('')}</div>
         ${subList.length ? `<div class="subpick"><span class="lbl">${subName}（不選＝全部）</span><div class="seg">${subList.map((x) => `<button type="button" data-hsub="${esc(x)}" aria-pressed="${hf.sub.includes(x)}">${esc(x)}</button>`).join('')}</div></div>` : ''}
         ${resumeAt > 0 ? `<button type="button" class="linkbtn" data-act="resume">繼續上次：${esc(filterLabel(S.filter))}，第 ${resumeAt + 1} 個</button>` : ''}
@@ -393,7 +409,7 @@
     const draw = (el) => {
       const cnt = WORDS.filter((w) => matchFilter(w, f)).length;
       const segBtn = (grp, val, label, on) => `<button type="button" data-g="${grp}" data-v="${esc(val)}" aria-pressed="${on}">${esc(label)}</button>`;
-      let h = `<div class="form"><div class="field"><span class="lbl">來源</span><div class="seg">${[['all', '全部'], ['課本', '課本'], ['雜誌', '雜誌'], ['核心', '核心單字'], ['成功閱讀', '成功閱讀'], ['學測翻譯', '學測翻譯'], ['multi', '多個來源都有']].map(([v, l]) => segBtn('src', v, l, f.src === v)).join('')}</div></div>`;
+      let h = `<div class="form"><div class="field"><span class="lbl">考試範圍</span><div class="seg">${[['', '不限'], ['dk', '段考範圍'], ['jk', '加考範圍']].map(([v, l]) => segBtn('exam', v, l, (f.exam || '') === v)).join('')}</div></div><div class="field"><span class="lbl">來源</span><div class="seg">${[['all', '全部'], ['課本', '課本'], ['雜誌', '雜誌'], ['核心', '核心單字'], ['成功閱讀', '成功閱讀'], ['學測翻譯', '學測翻譯'], ['multi', '多個來源都有']].map(([v, l]) => segBtn('src', v, l, f.src === v)).join('')}</div></div>`;
       if (SRC_ORDER.includes(f.src)) h += `<div class="field"><span class="lbl">${subLabel[f.src]}（不選＝全部）</span><div class="seg">${subSorted(f.src).map((s) => segBtn('sub', s, s, f.sub.includes(s))).join('')}</div></div>`;
       h += `<div class="field"><span class="lbl">詞性（可複選）</span><div class="seg">${Object.entries(POS_NAMES).map(([k, v]) => segBtn('pos', k, v, f.pos.includes(k))).join('')}</div></div>`;
       h += `<div class="field"><span class="lbl">主題（可複選）</span><div class="seg">${themes.map((t) => segBtn('theme', t, t, f.theme.includes(t))).join('')}</div></div>`;
@@ -407,7 +423,8 @@
         const b = e.target.closest('button'); if (!b) return;
         if (b.dataset.g) {
           const g = b.dataset.g, v = b.dataset.v;
-          if (g === 'src') { f.src = v; f.sub = []; }
+          if (g === 'exam') { f.exam = v; f.src = 'all'; f.sub = []; }
+          else if (g === 'src') { f.src = v; f.sub = []; f.exam = ''; }
           else if (g === 'mark') f.mark = v;
           else { const arr = f[g]; const k = arr.indexOf(v); if (k >= 0) arr.splice(k, 1); else arr.push(v); }
           draw(el);
@@ -702,6 +719,8 @@
     const a = b.dataset.act;
     const w = S.view === 'cards' ? curWord() : null;
     switch (a) {
+      case 'examcards': S.filter = Object.assign(defaultFilter(), { exam: b.dataset.exam }); S.view = 'cards'; hf = null; save(); render(); break;
+      case 'examquiz': S.filter = Object.assign(defaultFilter(), { exam: b.dataset.exam }); qset.scope = 'filter'; Q = null; S.view = 'quiz'; hf = null; save(); render(); break;
       case 'homestart': S.filter = Object.assign(defaultFilter(), { src: hf.src, sub: hf.sub.slice() }); S.view = 'cards'; hf = null; save(); render(); break;
       case 'resume': S.view = 'cards'; hf = null; save(); render(); break;
       case 'homereview': S.view = 'review'; hf = null; save(); render(); break;
